@@ -9,6 +9,7 @@ server.err.log
 gh-auth.log
 gh-auth.err.log
 .vercel/
+public/
 .env
 .env.*
 !.env.example
