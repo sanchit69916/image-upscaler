@@ -15,7 +15,7 @@
         <p class="eyebrow">PixelLift Photo</p>
         <h1>Photo 4K Lab</h1>
         <p class="subtitle">
-          Local Real-ESRGAN for realistic photo restoration and 4K-ready exports without paid API credits.
+          A deployable photo enhancer with instant browser upscaling and an optional local Real-ESRGAN boost for stronger AI restoration.
         </p>
       </div>
 
@@ -37,10 +37,10 @@
           <input id="fileInput" type="file" accept="image/*">
           <span class="dropzone-kicker">Input</span>
           <span class="dropzone-title">Drop an image here</span>
-          <span class="dropzone-subtitle">Enhance on your own machine, then download the final image</span>
+          <span class="dropzone-subtitle">Enhance in the browser right away, then switch to local AI mode when you want a stronger pass</span>
         </label>
 
-        <p class="api-state" id="apiState">Start the local server to enable enhancement.</p>
+        <p class="api-state" id="apiState">Browser enhancement mode active. Local AI mode appears automatically when the server is available.</p>
 
         <section class="meta-grid">
           <article class="meta-card">
@@ -53,7 +53,7 @@
           </article>
           <article class="meta-card">
             <span class="meta-label">Model</span>
-            <strong id="pipelineInfo">Local Real-ESRGAN x4</strong>
+            <strong id="pipelineInfo">Browser HD enhancer</strong>
           </article>
         </section>
 
@@ -79,7 +79,7 @@
           <div class="control-group">
             <label for="model">Photo Model</label>
             <select id="model">
-              <option value="local-real-esrgan" selected>Real-ESRGAN local x4</option>
+              <option value="hybrid-photo" selected>Hybrid browser plus local AI</option>
             </select>
           </div>
 
@@ -112,7 +112,7 @@
         </div>
 
         <p class="status" id="statusMessage">Waiting for an image.</p>
-        <p class="note">Higher detail budget sends more pixels to the cloud model. Use face restore for portraits.</p>
+        <p class="note">Hosted mode uses a strong browser enhancement pass. Start the optional local server to route the same UI into bundled Real-ESRGAN for a heavier upscale.</p>
       </aside>
 
       <section class="panel viewer-panel">
@@ -134,7 +134,7 @@
           </div>
           <div class="compare-divider" id="compareDivider"></div>
           <div class="compare-empty">
-            Load an image, then run the local enhancement.
+            Load an image, then run browser or local enhancement.
           </div>
         </div>
 
