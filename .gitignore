@@ -6,6 +6,8 @@ outputs/
 __pycache__/
 server.out.log
 server.err.log
+gh-auth.log
+gh-auth.err.log
 .vercel/
 .env
 .env.*
