@@ -194,8 +194,8 @@ async function runBrowserEnhancer() {
   }
 
   const size = getTargetSize(app.sourceImage.naturalWidth, app.sourceImage.naturalHeight, ui.preset.value);
-  let canvas = upscaleInSteps(app.sourceImage, size.width, size.height);
-  canvas = addDetailPass(canvas, Number(ui.detailStrength.value) / 100);
+  let canvas = await upscaleInSteps(app.sourceImage, size.width, size.height);
+  canvas = await addDetailPass(canvas, Number(ui.detailStrength.value) / 100);
   canvas = frameOutput(canvas, size.exportWidth, size.exportHeight, ui.fitMode.value);
 
   const blob = await canvasToBlob(canvas, ui.format.value);
@@ -346,7 +346,7 @@ function getTargetSize(width, height, preset) {
   };
 }
 
-function upscaleInSteps(image, targetWidth, targetHeight) {
+async function upscaleInSteps(image, targetWidth, targetHeight) {
   let canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
@@ -358,10 +358,13 @@ function upscaleInSteps(image, targetWidth, targetHeight) {
 
   let width = image.naturalWidth;
   let height = image.naturalHeight;
+  let step = 0;
 
   while (width < targetWidth || height < targetHeight) {
+    step += 1;
     width = Math.min(targetWidth, Math.max(width + 1, Math.round(width * 1.55)));
     height = Math.min(targetHeight, Math.max(height + 1, Math.round(height * 1.55)));
+    setStatus(`Upscaling in browser... pass ${step}`);
 
     const nextCanvas = document.createElement("canvas");
     nextCanvas.width = width;
@@ -374,12 +377,13 @@ function upscaleInSteps(image, targetWidth, targetHeight) {
 
     canvas = nextCanvas;
     context = nextContext;
+    await nextFrame();
   }
 
   return canvas;
 }
 
-function addDetailPass(canvas, strength) {
+async function addDetailPass(canvas, strength) {
   const width = canvas.width;
   const height = canvas.height;
   const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -387,25 +391,33 @@ function addDetailPass(canvas, strength) {
   const source = imageData.data;
   const output = new Uint8ClampedArray(source);
   const sharpen = 0.35 + strength * 1.25;
+  const rowChunk = height > 1800 ? 32 : 64;
 
-  for (let y = 1; y < height - 1; y += 1) {
-    for (let x = 1; x < width - 1; x += 1) {
-      const offset = (y * width + x) * 4;
+  for (let y = 1; y < height - 1; y += rowChunk) {
+    const endY = Math.min(height - 1, y + rowChunk);
+    setStatus(`Finishing detail... ${Math.round((endY / height) * 100)}%`);
 
-      for (let channel = 0; channel < 3; channel += 1) {
-        const center = source[offset + channel];
-        const top = source[offset - width * 4 + channel];
-        const bottom = source[offset + width * 4 + channel];
-        const left = source[offset - 4 + channel];
-        const right = source[offset + 4 + channel];
-        const edge = center * 5 - top - bottom - left - right;
-        const contrast = ((center - 128) * (1 + strength * 0.18)) + 128;
+    for (let scanY = y; scanY < endY; scanY += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const offset = (scanY * width + x) * 4;
 
-        output[offset + channel] = clampByte(contrast + (edge - center) * sharpen * 0.18);
+        for (let channel = 0; channel < 3; channel += 1) {
+          const center = source[offset + channel];
+          const top = source[offset - width * 4 + channel];
+          const bottom = source[offset + width * 4 + channel];
+          const left = source[offset - 4 + channel];
+          const right = source[offset + 4 + channel];
+          const edge = center * 5 - top - bottom - left - right;
+          const contrast = ((center - 128) * (1 + strength * 0.18)) + 128;
+
+          output[offset + channel] = clampByte(contrast + (edge - center) * sharpen * 0.18);
+        }
+
+        output[offset + 3] = 255;
       }
-
-      output[offset + 3] = 255;
     }
+
+    await nextFrame();
   }
 
   const result = new ImageData(output, width, height);
@@ -446,6 +458,12 @@ function frameOutput(canvas, exportWidth, exportHeight, fitMode) {
 
   context.drawImage(canvas, x, y, drawWidth, drawHeight);
   return output;
+}
+
+function nextFrame() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 }
 
 function canvasToBlob(canvas, format) {
