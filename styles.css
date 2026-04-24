@@ -477,6 +477,11 @@ button:disabled {
   object-fit: cover;
 }
 
+.compare-frame > img:not([src]),
+.compare-overlay img:not([src]) {
+  display: none;
+}
+
 .compare-overlay {
   position: absolute;
   inset: 0;
