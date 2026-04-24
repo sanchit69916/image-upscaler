@@ -1,0 +1,10 @@
+{
+  "name": "PixelLift 4K Upscaler",
+  "short_name": "PixelLift",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4ecdf",
+  "theme_color": "#d9672d",
+  "description": "Local-first 4K image upscaler web app.",
+  "icons": []
+}

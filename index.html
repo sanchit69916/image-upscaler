@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d9672d">
+  <title>PixelLift Photo Enhancer</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">PixelLift Photo</p>
+        <h1>Photo 4K Lab</h1>
+        <p class="subtitle">
+          Cloud Real-ESRGAN for realistic photo restoration, face cleanup, and 4K-ready exports.
+        </p>
+      </div>
+
+        <div class="hero-stats">
+          <div class="stat-card">
+            <strong>Photo-first</strong>
+            <span>General x4 plus model</span>
+          </div>
+          <div class="stat-card accent">
+            <strong>Natural detail</strong>
+            <span>Less stylized output</span>
+          </div>
+        </div>
+    </section>
+
+    <section class="grid">
+      <aside class="panel sidebar">
+        <label class="dropzone" id="dropzone" for="fileInput">
+          <input id="fileInput" type="file" accept="image/*">
+          <span class="dropzone-kicker">Input</span>
+          <span class="dropzone-title">Drop an image here</span>
+          <span class="dropzone-subtitle">Upload once, enhance in the cloud, download the final image</span>
+        </label>
+
+        <p class="api-state" id="apiState">Cloud Real-ESRGAN API ready after deployment.</p>
+
+        <section class="meta-grid">
+          <article class="meta-card">
+            <span class="meta-label">Source</span>
+            <strong id="sourceInfo">No image loaded</strong>
+          </article>
+          <article class="meta-card">
+            <span class="meta-label">Output</span>
+            <strong id="targetInfo">Waiting for input</strong>
+          </article>
+          <article class="meta-card">
+            <span class="meta-label">Model</span>
+            <strong id="pipelineInfo">Real-ESRGAN cloud model</strong>
+          </article>
+        </section>
+
+        <section class="control-stack">
+          <div class="control-group">
+            <label for="preset">Target</label>
+            <select id="preset">
+              <option value="2x">2x</option>
+              <option value="4x" selected>4x</option>
+              <option value="4k">4K UHD</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="fitMode">4K Framing</label>
+            <select id="fitMode">
+              <option value="contain" selected>Fit inside 4K</option>
+              <option value="cover">Fill and crop to 4K</option>
+              <option value="stretch">Stretch to exact 4K</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="model">Photo Model</label>
+            <select id="model">
+              <option value="replicate-real-esrgan" selected>Real-ESRGAN + GFPGAN</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="realismStrength">Source Detail Budget</label>
+            <input id="realismStrength" type="range" min="35" max="100" value="72">
+            <span class="range-value" id="realismStrengthValue">72%</span>
+          </div>
+
+          <div class="control-row">
+            <div class="control-group">
+              <label for="outputFormat">Format</label>
+              <select id="outputFormat">
+                <option value="png" selected>PNG</option>
+                <option value="jpg">JPG</option>
+                <option value="webp">WEBP</option>
+              </select>
+            </div>
+
+            <label class="check-group" for="faceEnhance">
+              <input id="faceEnhance" type="checkbox" checked>
+              <span>Face restore</span>
+            </label>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button id="upscaleButton" class="primary" disabled>Enhance Photo</button>
+          <button id="downloadButton" class="secondary" disabled>Download</button>
+        </div>
+
+        <p class="status" id="statusMessage">Waiting for an image.</p>
+        <p class="note">Higher detail budget sends more pixels to the cloud model. Use face restore for portraits.</p>
+      </aside>
+
+      <section class="panel viewer-panel">
+        <div class="viewer-header">
+          <div>
+            <p class="viewer-eyebrow">Live comparison</p>
+            <h2>Before / After</h2>
+          </div>
+          <div class="compare-readout">
+            <span>Compare</span>
+            <strong id="compareReadout">50%</strong>
+          </div>
+        </div>
+
+        <div class="compare-frame" id="compareFrame">
+          <img id="basePreview" alt="Original image preview">
+          <div class="compare-overlay" id="compareOverlay">
+            <img id="resultPreview" alt="Upscaled image preview">
+          </div>
+          <div class="compare-divider" id="compareDivider"></div>
+          <div class="compare-empty">
+            Load an image, then run the cloud enhancement.
+          </div>
+        </div>
+
+        <div class="slider-wrap">
+          <label for="compareSlider">Comparison Slider</label>
+          <input id="compareSlider" type="range" min="0" max="100" value="50">
+        </div>
+
+        <div class="insights">
+          <article class="insight-card">
+            <span class="meta-label">Framing</span>
+            <strong id="framingInfo">Fit inside 4K</strong>
+          </article>
+          <article class="insight-card">
+            <span class="meta-label">Export</span>
+            <strong id="exportInfo">PNG export</strong>
+          </article>
+          <article class="insight-card">
+            <span class="meta-label">Enhancement</span>
+            <strong id="detailInfo">Realistic photo enhancement</strong>
+          </article>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

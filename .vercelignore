@@ -1,0 +1,13 @@
+node_modules
+tools
+outputs
+.tmp
+.sixth
+__pycache__
+server.out.log
+server.err.log
+*.pyc
+*.png
+*.jpg
+*.jpeg
+*.webp
