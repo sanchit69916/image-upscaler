@@ -1,301 +1,357 @@
-const elements = {
-  fileInput: document.getElementById("fileInput"),
-  dropzone: document.getElementById("dropzone"),
-  preset: document.getElementById("preset"),
-  fitMode: document.getElementById("fitMode"),
-  model: document.getElementById("model"),
-  realismStrength: document.getElementById("realismStrength"),
-  outputFormat: document.getElementById("outputFormat"),
-  faceEnhance: document.getElementById("faceEnhance"),
-  compareSlider: document.getElementById("compareSlider"),
-  compareReadout: document.getElementById("compareReadout"),
-  compareFrame: document.getElementById("compareFrame"),
-  compareOverlay: document.getElementById("compareOverlay"),
-  compareDivider: document.getElementById("compareDivider"),
-  basePreview: document.getElementById("basePreview"),
-  resultPreview: document.getElementById("resultPreview"),
-  sourceInfo: document.getElementById("sourceInfo"),
-  targetInfo: document.getElementById("targetInfo"),
-  pipelineInfo: document.getElementById("pipelineInfo"),
-  framingInfo: document.getElementById("framingInfo"),
-  exportInfo: document.getElementById("exportInfo"),
-  detailInfo: document.getElementById("detailInfo"),
-  realismStrengthValue: document.getElementById("realismStrengthValue"),
-  upscaleButton: document.getElementById("upscaleButton"),
-  downloadButton: document.getElementById("downloadButton"),
-  status: document.getElementById("statusMessage"),
-  apiState: document.getElementById("apiState")
+const $ = (id) => document.getElementById(id);
+
+const ui = {
+  fileInput: $("fileInput"),
+  dropzone: $("dropzone"),
+  preset: $("preset"),
+  fitMode: $("fitMode"),
+  detailStrength: $("realismStrength"),
+  format: $("outputFormat"),
+  faceEnhance: $("faceEnhance"),
+  compareSlider: $("compareSlider"),
+  compareReadout: $("compareReadout"),
+  compareFrame: $("compareFrame"),
+  compareOverlay: $("compareOverlay"),
+  compareDivider: $("compareDivider"),
+  basePreview: $("basePreview"),
+  resultPreview: $("resultPreview"),
+  sourceInfo: $("sourceInfo"),
+  targetInfo: $("targetInfo"),
+  pipelineInfo: $("pipelineInfo"),
+  framingInfo: $("framingInfo"),
+  exportInfo: $("exportInfo"),
+  detailInfo: $("detailInfo"),
+  detailStrengthValue: $("realismStrengthValue"),
+  enhanceButton: $("upscaleButton"),
+  downloadButton: $("downloadButton"),
+  status: $("statusMessage"),
+  apiState: $("apiState")
 };
 
-const state = {
+const app = {
   file: null,
+  sourceImage: null,
   sourceUrl: "",
   resultUrl: "",
   downloadName: "enhanced-photo.png",
   busy: false,
-  sourceImage: null,
-  backendAvailable: false
+  hasLocalBackend: false
 };
 
-wireEvents();
-syncUi();
-checkHealth();
+boot();
 
-function wireEvents() {
-  elements.fileInput.addEventListener("change", (event) => {
-    const [file] = event.target.files;
-    if (file) loadImageFile(file);
-  });
-
-  ["dragenter", "dragover"].forEach((eventName) => {
-    elements.dropzone.addEventListener(eventName, (event) => {
-      event.preventDefault();
-      elements.dropzone.classList.add("is-active");
-    });
-  });
-
-  ["dragleave", "drop"].forEach((eventName) => {
-    elements.dropzone.addEventListener(eventName, (event) => {
-      event.preventDefault();
-      elements.dropzone.classList.remove("is-active");
-    });
-  });
-
-  elements.dropzone.addEventListener("drop", (event) => {
-    const [file] = event.dataTransfer.files;
-    if (file && file.type.startsWith("image/")) loadImageFile(file);
-  });
-
-  [
-    elements.preset,
-    elements.fitMode,
-    elements.model,
-    elements.realismStrength,
-    elements.outputFormat,
-    elements.faceEnhance
-  ].forEach((input) => {
-    input.addEventListener("change", syncUi);
-    input.addEventListener("input", syncUi);
-  });
-
-  elements.compareSlider.addEventListener("input", updateCompareView);
-  elements.upscaleButton.addEventListener("click", enhancePhoto);
-  elements.downloadButton.addEventListener("click", downloadResult);
+function boot() {
+  bindFileInput();
+  bindDropzone();
+  bindControls();
+  render();
+  detectBackend();
 }
 
-async function checkHealth() {
+function bindFileInput() {
+  ui.fileInput.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      openFile(file);
+    }
+  });
+}
+
+function bindDropzone() {
+  const activate = (event) => {
+    event.preventDefault();
+    ui.dropzone.classList.add("is-active");
+  };
+
+  const deactivate = (event) => {
+    event.preventDefault();
+    ui.dropzone.classList.remove("is-active");
+  };
+
+  ["dragenter", "dragover"].forEach((name) => {
+    ui.dropzone.addEventListener(name, activate);
+  });
+
+  ["dragleave", "drop"].forEach((name) => {
+    ui.dropzone.addEventListener(name, deactivate);
+  });
+
+  ui.dropzone.addEventListener("drop", (event) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      openFile(file);
+    }
+  });
+}
+
+function bindControls() {
+  [
+    ui.preset,
+    ui.fitMode,
+    ui.detailStrength,
+    ui.format,
+    ui.faceEnhance
+  ].forEach((control) => {
+    control.addEventListener("change", render);
+    control.addEventListener("input", render);
+  });
+
+  ui.compareSlider.addEventListener("input", updateCompareView);
+  ui.enhanceButton.addEventListener("click", enhanceImage);
+  ui.downloadButton.addEventListener("click", downloadResult);
+}
+
+async function detectBackend() {
   try {
     const response = await fetch("/health");
     const data = await response.json();
-    if (response.ok && data.ok) {
-      state.backendAvailable = true;
-      elements.apiState.textContent = "Local Real-ESRGAN server connected.";
-      elements.upscaleButton.disabled = !state.file;
-      return;
-    }
-  } catch {}
-  state.backendAvailable = false;
-  elements.apiState.textContent = "Browser enhancement mode active. Start the local server for stronger AI upscale.";
+    app.hasLocalBackend = Boolean(response.ok && data.ok);
+  } catch {
+    app.hasLocalBackend = false;
+  }
+
+  ui.apiState.textContent = app.hasLocalBackend
+    ? "Local Real-ESRGAN server connected."
+    : "Browser enhancement mode active. Start the local server for a stronger upscale.";
+
+  render();
 }
 
-function loadImageFile(file) {
-  resetResult();
-  revokeSourceUrl();
-  state.file = file;
-  state.sourceUrl = URL.createObjectURL(file);
-  elements.basePreview.src = state.sourceUrl;
-  elements.compareFrame.classList.add("has-image");
+function openFile(file) {
+  clearResult();
+  releaseSource();
+
+  app.file = file;
+  app.sourceUrl = URL.createObjectURL(file);
+  ui.basePreview.src = app.sourceUrl;
+  ui.compareFrame.classList.add("has-image");
 
   const image = new Image();
   image.onload = () => {
-    state.sourceImage = image;
-    elements.sourceInfo.textContent = `${image.naturalWidth} x ${image.naturalHeight}`;
+    app.sourceImage = image;
+    ui.sourceInfo.textContent = `${image.naturalWidth} x ${image.naturalHeight}`;
     setStatus(`Loaded ${file.name}`);
-    syncUi();
+    render();
   };
-  image.onerror = () => setStatus("That file could not be opened as an image.");
-  image.src = state.sourceUrl;
+  image.onerror = () => {
+    setStatus("That file could not be opened as an image.");
+  };
+  image.src = app.sourceUrl;
 }
 
-async function enhancePhoto() {
-  if (!state.file || state.busy) return;
+async function enhanceImage() {
+  if (!app.file || app.busy) {
+    return;
+  }
 
-  state.busy = true;
-  syncUi();
-  setStatus(state.backendAvailable ? "Uploading image to the local enhancer..." : "Running browser enhancement...");
+  app.busy = true;
+  render();
+  setStatus(app.hasLocalBackend ? "Uploading to the local enhancer..." : "Enhancing in the browser...");
 
   try {
-    if (!state.backendAvailable) {
-      await enhancePhotoInBrowser();
-      return;
+    if (app.hasLocalBackend) {
+      await runLocalEnhancer();
+    } else {
+      await runBrowserEnhancer();
     }
 
-    const formData = new FormData();
-    formData.append("file", state.file);
-    formData.append("preset", elements.preset.value);
-    formData.append("fit_mode", elements.fitMode.value);
-    formData.append("output_format", elements.outputFormat.value);
-    formData.append("detail_strength", String(Number(elements.realismStrength.value) / 100));
-    formData.append("face_enhance", elements.faceEnhance.checked ? "1" : "0");
-
-    const response = await fetch("/api/upscale", {
-      method: "POST",
-      body: formData
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || "Local enhancement failed.");
-    }
-
-    const blob = await response.blob();
-    if (state.resultUrl) URL.revokeObjectURL(state.resultUrl);
-    state.resultUrl = URL.createObjectURL(blob);
-    state.downloadName = `${safeBaseName(state.file.name)}-enhanced.${elements.outputFormat.value}`;
-    elements.resultPreview.src = state.resultUrl;
-    elements.downloadButton.disabled = false;
-    updateCompareView();
     setStatus("Enhancement complete.");
   } catch (error) {
     console.error(error);
     setStatus(error.message || "Enhancement failed.");
   } finally {
-    state.busy = false;
-    syncUi();
+    app.busy = false;
+    render();
   }
 }
 
-async function enhancePhotoInBrowser() {
-  const source = state.sourceImage;
-  if (!source) {
+async function runLocalEnhancer() {
+  const formData = new FormData();
+  formData.append("file", app.file);
+  formData.append("preset", ui.preset.value);
+  formData.append("fit_mode", ui.fitMode.value);
+  formData.append("output_format", ui.format.value);
+  formData.append("detail_strength", String(Number(ui.detailStrength.value) / 100));
+  formData.append("face_enhance", ui.faceEnhance.checked ? "1" : "0");
+
+  const response = await fetch("/api/upscale", {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Local enhancement failed.");
+  }
+
+  const blob = await response.blob();
+  setResult(blob);
+}
+
+async function runBrowserEnhancer() {
+  if (!app.sourceImage) {
     throw new Error("Load an image first.");
   }
 
-  const { width, height, exportWidth, exportHeight } = getTargetSizing(
-    source.naturalWidth,
-    source.naturalHeight,
-    elements.preset.value
-  );
+  const size = getTargetSize(app.sourceImage.naturalWidth, app.sourceImage.naturalHeight, ui.preset.value);
+  let canvas = upscaleInSteps(app.sourceImage, size.width, size.height);
+  canvas = addDetailPass(canvas, Number(ui.detailStrength.value) / 100);
+  canvas = frameOutput(canvas, size.exportWidth, size.exportHeight, ui.fitMode.value);
 
-  setStatus("Upscaling in the browser...");
-  let canvas = progressiveUpscale(source, width, height);
-  canvas = applyLocalFinish(canvas, Number(elements.realismStrength.value) / 100);
-  canvas = composeOutput(canvas, exportWidth, exportHeight, elements.fitMode.value);
-
-  const blob = await canvasToBlob(canvas, elements.outputFormat.value);
-  if (state.resultUrl) {
-    URL.revokeObjectURL(state.resultUrl);
-  }
-  state.resultUrl = URL.createObjectURL(blob);
-  state.downloadName = `${safeBaseName(state.file.name)}-enhanced.${elements.outputFormat.value}`;
-  elements.resultPreview.src = state.resultUrl;
-  elements.downloadButton.disabled = false;
-  updateCompareView();
-  setStatus("Browser enhancement complete.");
+  const blob = await canvasToBlob(canvas, ui.format.value);
+  setResult(blob);
 }
 
-function syncUi() {
+function setResult(blob) {
+  clearResult();
+  app.resultUrl = URL.createObjectURL(blob);
+  app.downloadName = `${makeSafeName(app.file?.name || "enhanced-photo")}-enhanced.${ui.format.value}`;
+  ui.resultPreview.src = app.resultUrl;
+  ui.downloadButton.disabled = false;
   updateCompareView();
-  elements.pipelineInfo.textContent = state.backendAvailable ? "Local Real-ESRGAN x4" : "Browser HD enhancer";
-  elements.framingInfo.textContent = getFitLabel(elements.fitMode.value);
-  elements.exportInfo.textContent = getFormatLabel(elements.outputFormat.value);
-  elements.realismStrengthValue.textContent = `${elements.realismStrength.value}%`;
-  elements.detailInfo.textContent = elements.faceEnhance.checked
-    ? (state.backendAvailable ? "Portrait restore enabled" : "Portrait-friendly detail mode")
-    : `${elements.realismStrength.value}% detail pass`;
+}
 
-  if (!state.file) {
-    elements.sourceInfo.textContent = "No image loaded";
-    elements.targetInfo.textContent = "Waiting for input";
-    elements.upscaleButton.disabled = true;
+function clearResult() {
+  if (app.resultUrl) {
+    URL.revokeObjectURL(app.resultUrl);
+    app.resultUrl = "";
+  }
+
+  ui.resultPreview.removeAttribute("src");
+  ui.downloadButton.disabled = true;
+}
+
+function releaseSource() {
+  if (app.sourceUrl) {
+    URL.revokeObjectURL(app.sourceUrl);
+    app.sourceUrl = "";
+  }
+}
+
+function render() {
+  updateCompareView();
+
+  ui.pipelineInfo.textContent = app.hasLocalBackend ? "Local Real-ESRGAN x4" : "Browser HD enhancer";
+  ui.framingInfo.textContent = getFitLabel(ui.fitMode.value);
+  ui.exportInfo.textContent = getFormatLabel(ui.format.value);
+  ui.detailStrengthValue.textContent = `${ui.detailStrength.value}%`;
+  ui.detailInfo.textContent = getDetailLabel();
+
+  if (!app.file) {
+    ui.sourceInfo.textContent = "No image loaded";
+    ui.targetInfo.textContent = "Waiting for input";
+    ui.enhanceButton.disabled = true;
     return;
   }
 
-  elements.targetInfo.textContent = elements.preset.value === "4k"
-    ? `3840 x 2160 ${state.backendAvailable ? "local" : "browser"} output`
-    : `${elements.preset.value} ${state.backendAvailable ? "local" : "browser"} upscale`;
-  elements.upscaleButton.disabled = state.busy;
+  ui.targetInfo.textContent = getTargetLabel();
+  ui.enhanceButton.disabled = app.busy;
+}
+
+function getDetailLabel() {
+  if (ui.faceEnhance.checked) {
+    return app.hasLocalBackend ? "Portrait restore enabled" : "Portrait-friendly detail mode";
+  }
+
+  return `${ui.detailStrength.value}% detail pass`;
+}
+
+function getTargetLabel() {
+  const mode = app.hasLocalBackend ? "local" : "browser";
+  if (ui.preset.value === "4k") {
+    return `3840 x 2160 ${mode} output`;
+  }
+
+  return `${ui.preset.value} ${mode} upscale`;
 }
 
 function updateCompareView() {
-  const percent = Number(elements.compareSlider.value);
-  elements.compareOverlay.style.width = `${percent}%`;
-  elements.compareDivider.style.left = `${percent}%`;
-  elements.compareReadout.textContent = `${percent}%`;
+  const value = Number(ui.compareSlider.value);
+  ui.compareOverlay.style.width = `${value}%`;
+  ui.compareDivider.style.left = `${value}%`;
+  ui.compareReadout.textContent = `${value}%`;
 }
 
 function downloadResult() {
-  if (!state.resultUrl) return;
-  const anchor = document.createElement("a");
-  anchor.href = state.resultUrl;
-  anchor.download = state.downloadName;
-  anchor.click();
-}
-
-function resetResult() {
-  if (state.resultUrl) {
-    URL.revokeObjectURL(state.resultUrl);
-    state.resultUrl = "";
+  if (!app.resultUrl) {
+    return;
   }
-  elements.resultPreview.removeAttribute("src");
-  elements.downloadButton.disabled = true;
-}
 
-function revokeSourceUrl() {
-  if (state.sourceUrl) URL.revokeObjectURL(state.sourceUrl);
-  state.sourceUrl = "";
+  const link = document.createElement("a");
+  link.href = app.resultUrl;
+  link.download = app.downloadName;
+  link.click();
 }
 
 function getFitLabel(mode) {
-  if (mode === "cover") return "Fill and crop to 4K";
-  if (mode === "stretch") return "Stretch to exact 4K";
-  return "Fit inside 4K";
+  switch (mode) {
+    case "cover":
+      return "Fill and crop to 4K";
+    case "stretch":
+      return "Stretch to exact 4K";
+    default:
+      return "Fit inside 4K";
+  }
 }
 
 function getFormatLabel(format) {
-  if (format === "jpg") return "JPEG export";
-  if (format === "webp") return "WEBP export";
-  return "PNG export";
+  switch (format) {
+    case "jpg":
+      return "JPEG export";
+    case "webp":
+      return "WEBP export";
+    default:
+      return "PNG export";
+  }
 }
 
 function setStatus(message) {
-  elements.status.textContent = message;
+  ui.status.textContent = message;
 }
 
-function safeBaseName(name) {
-  return name.replace(/\.[^.]+$/, "").replace(/[^a-z0-9-_]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "enhanced-photo";
+function makeSafeName(name) {
+  return name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-z0-9-_]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "enhanced-photo";
 }
 
-function getTargetSizing(width, height, preset) {
+function getTargetSize(width, height, preset) {
   if (preset === "2x") {
     return { width: width * 2, height: height * 2, exportWidth: width * 2, exportHeight: height * 2 };
   }
+
   if (preset === "4x") {
     return { width: width * 4, height: height * 4, exportWidth: width * 4, exportHeight: height * 4 };
   }
 
-  const imageRatio = width / height;
-  const targetRatio = 3840 / 2160;
-  if (imageRatio > targetRatio) {
+  const sourceRatio = width / height;
+  const frameRatio = 3840 / 2160;
+
+  if (sourceRatio > frameRatio) {
     return {
       width: 3840,
-      height: Math.round(3840 / imageRatio),
+      height: Math.round(3840 / sourceRatio),
       exportWidth: 3840,
       exportHeight: 2160
     };
   }
+
   return {
-    width: Math.round(2160 * imageRatio),
+    width: Math.round(2160 * sourceRatio),
     height: 2160,
     exportWidth: 3840,
     exportHeight: 2160
   };
 }
 
-function progressiveUpscale(image, targetWidth, targetHeight) {
-  let currentCanvas = document.createElement("canvas");
-  currentCanvas.width = image.naturalWidth;
-  currentCanvas.height = image.naturalHeight;
-  let context = currentCanvas.getContext("2d", { willReadFrequently: true });
+function upscaleInSteps(image, targetWidth, targetHeight) {
+  let canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  let context = canvas.getContext("2d", { willReadFrequently: true });
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0);
@@ -310,40 +366,45 @@ function progressiveUpscale(image, targetWidth, targetHeight) {
     const nextCanvas = document.createElement("canvas");
     nextCanvas.width = width;
     nextCanvas.height = height;
+
     const nextContext = nextCanvas.getContext("2d", { willReadFrequently: true });
     nextContext.imageSmoothingEnabled = true;
     nextContext.imageSmoothingQuality = "high";
-    nextContext.drawImage(currentCanvas, 0, 0, width, height);
-    currentCanvas = nextCanvas;
+    nextContext.drawImage(canvas, 0, 0, width, height);
+
+    canvas = nextCanvas;
     context = nextContext;
   }
 
-  return currentCanvas;
+  return canvas;
 }
 
-function applyLocalFinish(canvas, strength) {
+function addDetailPass(canvas, strength) {
   const width = canvas.width;
   const height = canvas.height;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   const imageData = context.getImageData(0, 0, width, height);
   const source = imageData.data;
   const output = new Uint8ClampedArray(source);
-  const sharpenAmount = 0.35 + strength * 1.25;
+  const sharpen = 0.35 + strength * 1.25;
 
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
-      const index = (y * width + x) * 4;
-      for (let c = 0; c < 3; c += 1) {
-        const center = source[index + c];
-        const top = source[index - width * 4 + c];
-        const bottom = source[index + width * 4 + c];
-        const left = source[index - 4 + c];
-        const right = source[index + 4 + c];
+      const offset = (y * width + x) * 4;
+
+      for (let channel = 0; channel < 3; channel += 1) {
+        const center = source[offset + channel];
+        const top = source[offset - width * 4 + channel];
+        const bottom = source[offset + width * 4 + channel];
+        const left = source[offset - 4 + channel];
+        const right = source[offset + 4 + channel];
         const edge = center * 5 - top - bottom - left - right;
         const contrast = ((center - 128) * (1 + strength * 0.18)) + 128;
-        output[index + c] = clampByte(contrast + (edge - center) * sharpenAmount * 0.18);
+
+        output[offset + channel] = clampByte(contrast + (edge - center) * sharpen * 0.18);
       }
-      output[index + 3] = 255;
+
+      output[offset + 3] = 255;
     }
   }
 
@@ -355,7 +416,7 @@ function applyLocalFinish(canvas, strength) {
   return nextCanvas;
 }
 
-function composeOutput(canvas, exportWidth, exportHeight, fitMode) {
+function frameOutput(canvas, exportWidth, exportHeight, fitMode) {
   if (canvas.width === exportWidth && canvas.height === exportHeight) {
     return canvas;
   }
@@ -363,6 +424,7 @@ function composeOutput(canvas, exportWidth, exportHeight, fitMode) {
   const output = document.createElement("canvas");
   output.width = exportWidth;
   output.height = exportHeight;
+
   const context = output.getContext("2d");
   context.fillStyle = "#0f1318";
   context.fillRect(0, 0, exportWidth, exportHeight);
@@ -376,25 +438,27 @@ function composeOutput(canvas, exportWidth, exportHeight, fitMode) {
 
   const sourceRatio = canvas.width / canvas.height;
   const targetRatio = exportWidth / exportHeight;
-  const cover = fitMode === "cover";
-  const fitWidth = cover ? sourceRatio < targetRatio : sourceRatio > targetRatio;
-  const drawWidth = fitWidth ? exportWidth : Math.round(exportHeight * sourceRatio);
-  const drawHeight = fitWidth ? Math.round(exportWidth / sourceRatio) : exportHeight;
-  const offsetX = Math.round((exportWidth - drawWidth) / 2);
-  const offsetY = Math.round((exportHeight - drawHeight) / 2);
-  context.drawImage(canvas, offsetX, offsetY, drawWidth, drawHeight);
+  const shouldFillWidth = fitMode === "cover" ? sourceRatio < targetRatio : sourceRatio > targetRatio;
+  const drawWidth = shouldFillWidth ? exportWidth : Math.round(exportHeight * sourceRatio);
+  const drawHeight = shouldFillWidth ? Math.round(exportWidth / sourceRatio) : exportHeight;
+  const x = Math.round((exportWidth - drawWidth) / 2);
+  const y = Math.round((exportHeight - drawHeight) / 2);
+
+  context.drawImage(canvas, x, y, drawWidth, drawHeight);
   return output;
 }
 
 function canvasToBlob(canvas, format) {
   const mimeType = format === "jpg" ? "image/jpeg" : `image/${format}`;
   const quality = format === "png" ? undefined : 0.95;
+
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) {
         resolve(blob);
         return;
       }
+
       reject(new Error("Could not export image."));
     }, mimeType, quality);
   });

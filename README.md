@@ -78,7 +78,6 @@ The local pipeline:
 This is the easiest way to preview the deployable version.
 
 ```powershell
-cd "C:\Users\sanchit\OneDrive\Documents\image upscaler"
 npm run build
 ```
 
