@@ -38,6 +38,7 @@ const state = {
 
 wireEvents();
 syncUi();
+checkHealth();
 
 function wireEvents() {
   elements.fileInput.addEventListener("change", (event) => {
@@ -81,6 +82,19 @@ function wireEvents() {
   elements.downloadButton.addEventListener("click", downloadResult);
 }
 
+async function checkHealth() {
+  try {
+    const response = await fetch("/health");
+    const data = await response.json();
+    if (response.ok && data.ok) {
+      elements.apiState.textContent = "Local Real-ESRGAN server connected.";
+      elements.upscaleButton.disabled = !state.file;
+      return;
+    }
+  } catch {}
+  elements.apiState.textContent = "Start the local server to enable enhancement.";
+}
+
 function loadImageFile(file) {
   resetResult();
   revokeSourceUrl();
@@ -105,28 +119,29 @@ async function enhancePhoto() {
 
   state.busy = true;
   syncUi();
-  setStatus("Preparing image for cloud enhancement...");
+  setStatus("Uploading image to the local enhancer...");
 
   try {
-    const imageData = await prepareImageDataUri();
-    setStatus("Starting Real-ESRGAN enhancement...");
+    const formData = new FormData();
+    formData.append("file", state.file);
+    formData.append("preset", elements.preset.value);
+    formData.append("fit_mode", elements.fitMode.value);
+    formData.append("output_format", elements.outputFormat.value);
+    formData.append("detail_strength", String(Number(elements.realismStrength.value) / 100));
+    formData.append("face_enhance", elements.faceEnhance.checked ? "1" : "0");
 
-    const created = await postJson("/api/upscale", {
-      image: imageData,
-      scale: getScale(),
-      faceEnhance: elements.faceEnhance.checked,
-      target: elements.preset.value,
-      detailStrength: Number(elements.realismStrength.value)
+    const response = await fetch("/api/upscale", {
+      method: "POST",
+      body: formData
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Local enhancement failed.");
+    }
 
-    const prediction = await waitForPrediction(created.id);
-    const outputUrl = normalizeOutputUrl(prediction.output);
-    if (!outputUrl) throw new Error("The model did not return an output image.");
-
-    setStatus("Preparing final export...");
-    const finalBlob = await renderFinalExport(outputUrl);
+    const blob = await response.blob();
     if (state.resultUrl) URL.revokeObjectURL(state.resultUrl);
-    state.resultUrl = URL.createObjectURL(finalBlob);
+    state.resultUrl = URL.createObjectURL(blob);
     state.downloadName = `${safeBaseName(state.file.name)}-enhanced.${elements.outputFormat.value}`;
     elements.resultPreview.src = state.resultUrl;
     elements.downloadButton.disabled = false;
@@ -141,143 +156,15 @@ async function enhancePhoto() {
   }
 }
 
-async function waitForPrediction(id) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const prediction = await postJson("/api/prediction", { id });
-    if (prediction.status === "succeeded" || prediction.status === "successful") {
-      return prediction;
-    }
-    if (prediction.status === "failed" || prediction.status === "canceled") {
-      throw new Error(prediction.error || "The enhancement job failed.");
-    }
-    setStatus(`Enhancing photo in the cloud... ${prediction.status || "processing"}`);
-    await sleep(1500);
-  }
-  throw new Error("The enhancement job took too long. Try a smaller image.");
-}
-
-async function prepareImageDataUri() {
-  const image = state.sourceImage;
-  const target = getUploadSize(image.naturalWidth, image.naturalHeight);
-  const canvas = document.createElement("canvas");
-  canvas.width = target.width;
-  canvas.height = target.height;
-  const context = canvas.getContext("2d");
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.drawImage(image, 0, 0, target.width, target.height);
-  return canvas.toDataURL("image/jpeg", 0.92);
-}
-
-function getUploadSize(width, height) {
-  if (elements.preset.value === "4k") {
-    const detail = Number(elements.realismStrength.value) / 100;
-    return fitWithin(width, height, Math.round(760 + detail * 360), Math.round(428 + detail * 202));
-  }
-  if (elements.preset.value === "2x") {
-    const detail = Number(elements.realismStrength.value) / 100;
-    return fitWithin(width, height, Math.round(1200 + detail * 800), Math.round(1200 + detail * 800));
-  }
-  const detail = Number(elements.realismStrength.value) / 100;
-  return fitWithin(width, height, Math.round(1000 + detail * 700), Math.round(1000 + detail * 700));
-}
-
-function fitWithin(width, height, maxWidth, maxHeight) {
-  const ratio = Math.min(maxWidth / width, maxHeight / height, 1);
-  return {
-    width: Math.max(1, Math.round(width * ratio)),
-    height: Math.max(1, Math.round(height * ratio))
-  };
-}
-
-function getScale() {
-  if (elements.preset.value === "2x") return 2;
-  return 4;
-}
-
-async function renderFinalExport(outputUrl) {
-  const imageUrl = await fetchSameOriginImage(outputUrl);
-  const image = await loadImage(imageUrl);
-  const canvas = document.createElement("canvas");
-
-  if (elements.preset.value === "4k") {
-    canvas.width = 3840;
-    canvas.height = 2160;
-    drawFramedImage(canvas, image);
-  } else {
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext("2d");
-    context.drawImage(image, 0, 0);
-  }
-
-  URL.revokeObjectURL(imageUrl);
-  return canvasToBlob(canvas, elements.outputFormat.value);
-}
-
-async function fetchSameOriginImage(outputUrl) {
-  const response = await fetch(`/api/image?url=${encodeURIComponent(outputUrl)}`);
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || "Could not fetch enhanced image.");
-  }
-  const blob = await response.blob();
-  return URL.createObjectURL(blob);
-}
-
-function drawFramedImage(canvas, image) {
-  const context = canvas.getContext("2d");
-  context.fillStyle = "#0f1318";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-
-  if (elements.fitMode.value === "stretch") {
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return;
-  }
-
-  const sourceRatio = image.naturalWidth / image.naturalHeight;
-  const canvasRatio = canvas.width / canvas.height;
-  const cover = elements.fitMode.value === "cover";
-  const fitWidth = cover ? sourceRatio < canvasRatio : sourceRatio > canvasRatio;
-  const drawWidth = fitWidth ? canvas.width : Math.round(canvas.height * sourceRatio);
-  const drawHeight = fitWidth ? Math.round(canvas.width / sourceRatio) : canvas.height;
-  const offsetX = Math.round((canvas.width - drawWidth) / 2);
-  const offsetY = Math.round((canvas.height - drawHeight) / 2);
-  context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-}
-
-async function postJson(url, payload) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || data.detail || "Request failed.");
-  }
-  return data;
-}
-
-function normalizeOutputUrl(output) {
-  if (typeof output === "string") return output;
-  if (Array.isArray(output)) return output[0];
-  if (output && typeof output.url === "string") return output.url;
-  return "";
-}
-
 function syncUi() {
   updateCompareView();
-  elements.apiState.textContent = "Cloud Real-ESRGAN API ready after deployment.";
-  elements.pipelineInfo.textContent = "Real-ESRGAN cloud model";
+  elements.pipelineInfo.textContent = "Local Real-ESRGAN x4";
   elements.framingInfo.textContent = getFitLabel(elements.fitMode.value);
   elements.exportInfo.textContent = getFormatLabel(elements.outputFormat.value);
   elements.realismStrengthValue.textContent = `${elements.realismStrength.value}%`;
   elements.detailInfo.textContent = elements.faceEnhance.checked
-    ? "GFPGAN face restore enabled"
-    : `${elements.realismStrength.value}% source detail`;
+    ? "Portrait restore enabled"
+    : `${elements.realismStrength.value}% detail pass`;
 
   if (!state.file) {
     elements.sourceInfo.textContent = "No image loaded";
@@ -287,8 +174,8 @@ function syncUi() {
   }
 
   elements.targetInfo.textContent = elements.preset.value === "4k"
-    ? "Cloud-enhanced 4K output"
-    : `${elements.preset.value} cloud upscale`;
+    ? "3840 x 2160 local output"
+    : `${elements.preset.value} local upscale`;
   elements.upscaleButton.disabled = state.busy;
 }
 
@@ -308,7 +195,10 @@ function downloadResult() {
 }
 
 function resetResult() {
-  state.resultUrl = "";
+  if (state.resultUrl) {
+    URL.revokeObjectURL(state.resultUrl);
+    state.resultUrl = "";
+  }
   elements.resultPreview.removeAttribute("src");
   elements.downloadButton.disabled = true;
 }
@@ -336,31 +226,4 @@ function setStatus(message) {
 
 function safeBaseName(name) {
   return name.replace(/\.[^.]+$/, "").replace(/[^a-z0-9-_]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "enhanced-photo";
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = src;
-  });
-}
-
-function canvasToBlob(canvas, format) {
-  const mimeType = format === "jpg" ? "image/jpeg" : `image/${format}`;
-  const quality = format === "png" ? undefined : 0.95;
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-        return;
-      }
-      reject(new Error("Could not export final image."));
-    }, mimeType, quality);
-  });
 }

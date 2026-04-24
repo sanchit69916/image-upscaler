@@ -15,7 +15,7 @@
         <p class="eyebrow">PixelLift Photo</p>
         <h1>Photo 4K Lab</h1>
         <p class="subtitle">
-          Cloud Real-ESRGAN for realistic photo restoration, face cleanup, and 4K-ready exports.
+          Local Real-ESRGAN for realistic photo restoration and 4K-ready exports without paid API credits.
         </p>
       </div>
 
@@ -37,10 +37,10 @@
           <input id="fileInput" type="file" accept="image/*">
           <span class="dropzone-kicker">Input</span>
           <span class="dropzone-title">Drop an image here</span>
-          <span class="dropzone-subtitle">Upload once, enhance in the cloud, download the final image</span>
+          <span class="dropzone-subtitle">Enhance on your own machine, then download the final image</span>
         </label>
 
-        <p class="api-state" id="apiState">Cloud Real-ESRGAN API ready after deployment.</p>
+        <p class="api-state" id="apiState">Start the local server to enable enhancement.</p>
 
         <section class="meta-grid">
           <article class="meta-card">
@@ -53,7 +53,7 @@
           </article>
           <article class="meta-card">
             <span class="meta-label">Model</span>
-            <strong id="pipelineInfo">Real-ESRGAN cloud model</strong>
+            <strong id="pipelineInfo">Local Real-ESRGAN x4</strong>
           </article>
         </section>
 
@@ -79,7 +79,7 @@
           <div class="control-group">
             <label for="model">Photo Model</label>
             <select id="model">
-              <option value="replicate-real-esrgan" selected>Real-ESRGAN + GFPGAN</option>
+              <option value="local-real-esrgan" selected>Real-ESRGAN local x4</option>
             </select>
           </div>
 
@@ -134,7 +134,7 @@
           </div>
           <div class="compare-divider" id="compareDivider"></div>
           <div class="compare-empty">
-            Load an image, then run the cloud enhancement.
+            Load an image, then run the local enhancement.
           </div>
         </div>
 

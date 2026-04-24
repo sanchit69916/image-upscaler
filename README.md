@@ -1,50 +1,22 @@
 # PixelLift Photo 4K Lab
 
-Hosted image enhancement app for realistic photo upscaling.
+Free local photo enhancement app using FastAPI and Real-ESRGAN.
 
-## Architecture
+## Run
 
-- Frontend: static HTML/CSS/JS, deployable on Vercel
-- API: Vercel serverless functions in `api/`
-- AI model: Replicate `nightmareai/real-esrgan`
-- Enhancement: Real-ESRGAN upscaling with optional GFPGAN face restoration
-- Final export: browser renders the returned AI image into PNG/JPG/WEBP, including exact `3840 x 2160` for 4K mode
+1. Double-click `start-server.cmd`
+2. Keep that terminal window open
+3. Open `http://127.0.0.1:8000`
 
-## Required Environment Variable
+## What it does
 
-Set this in Vercel:
-
-```text
-REPLICATE_API_TOKEN=your_replicate_token
-```
-
-Get a token from Replicate account settings.
-
-## Run Locally With Vercel
-
-```powershell
-npm install
-npx vercel dev
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-## Deploy
-
-```powershell
-npx vercel
-```
-
-After deployment, add `REPLICATE_API_TOKEN` in the Vercel dashboard and redeploy.
+- Runs Real-ESRGAN locally using the bundled `realesrgan-ncnn-vulkan.exe`
+- Supports `2x`, `4x`, and exact `4K UHD` output
+- Includes fit, crop, and stretch framing for 4K exports
+- Adds a light realistic finishing pass after the AI upscale
 
 ## Notes
 
-- The browser sends a compressed image data URI to `/api/upscale`.
-- `/api/upscale` starts a Replicate prediction.
-- `/api/prediction` polls the prediction until the result is ready.
-- `/api/image` safely proxies the Replicate output so the browser can create the final downloadable image.
-- `4K UHD` mode exports an exact `3840 x 2160` image using the selected fit/crop/stretch framing.
+- This uses your local machine, so no paid API credit is required
+- The bundled Python runtime is used automatically by `start-server.cmd`
+- The current local runtime does not include true face restoration, so the face toggle is just UI for now
